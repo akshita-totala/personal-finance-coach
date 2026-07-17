@@ -18,6 +18,8 @@ def extract_text_from_pdf(pdf_path):
 
         return text
 
+    except FileNotFoundError:
+        raise Exception("PDF file not found.")
+
     except Exception as e:
-        print(f"Error reading PDF: {e}")
-        return None
+        raise Exception(f"Error reading PDF: {str(e)}")

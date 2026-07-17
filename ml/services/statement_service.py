@@ -1,24 +1,56 @@
+import os
+
 from ml.parser.parser_service import process_pdf
-from ml.services.db import insert_transaction
+from ml.services.db import (
+    statement_exists,
+    insert_statement,
+    insert_transaction,
+    log_event,
+)
 
 
 def upload_statement(pdf_path):
-    """
-    Uploads a bank statement.
+    try:
+        transactions = process_pdf(pdf_path)
 
-    Steps:
-    1. Read PDF
-    2. Parse transactions
-    3. Validate transactions
-    4. Store transactions in database
-    """
+        filename = os.path.basename(pdf_path)
 
-    transactions = process_pdf(pdf_path)
+        if statement_exists(filename):
+            log_event(
+                action="Duplicate Upload",
+                resource=filename
+            )
 
-    for transaction in transactions:
-        insert_transaction(transaction)
+            return {
+                "status": "error",
+                "message": "Statement already uploaded."
+            }
 
-    return {
-        "status": "success",
-        "transactions_uploaded": len(transactions)
-    }
+        statement_id = insert_statement(filename)
+
+        for transaction in transactions:
+            insert_transaction(transaction, statement_id)
+
+        log_event(
+            action="Statement Uploaded",
+            resource=filename
+        )
+
+        return {
+            "status": "success",
+            "statement_id": statement_id,
+            "transactions_uploaded": len(transactions)
+        }
+
+    except Exception as e:
+        filename = os.path.basename(pdf_path)
+
+        log_event(
+            action="Upload Failed",
+            resource=filename
+        )
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }

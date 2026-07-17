@@ -1,15 +1,23 @@
 from ml.parser.validator import validate_transaction
 
-transaction = {
-    "date": "01/07/2026",
+valid_transaction = {
+    "date": "2026-07-01",
     "description": "SWIGGY",
     "amount": 450.0,
     "type": "Debit"
 }
 
-valid, message = validate_transaction(transaction)
+invalid_transaction = {
+    "date": "",
+    "description": "",
+    "amount": -100,
+    "type": ""
+}
 
-print("Valid:", valid)
+print("Valid Transaction:")
+print(validate_transaction(valid_transaction))
 
-if message:
-    print(message)
+print()
+
+print("Invalid Transaction:")
+print(validate_transaction(invalid_transaction))
