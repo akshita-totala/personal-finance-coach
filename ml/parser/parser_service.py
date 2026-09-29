@@ -6,8 +6,10 @@ from ml.parser.categorizer import categorize_transaction
 
 def process_pdf(pdf_path):
     text = extract_text_from_pdf(pdf_path)
+
     if not text.strip():
         raise Exception("PDF contains no readable text.")
+
     transactions = parse_transactions(text)
 
     valid_transactions = []
@@ -16,9 +18,13 @@ def process_pdf(pdf_path):
         is_valid, message = validate_transaction(transaction)
 
         if is_valid:
-            transaction["category"] = categorize_transaction(
-                transaction["description"]
+            category, confidence = categorize_transaction(
+                transaction["description"],
+                transaction["amount"]
             )
+
+            transaction["category"] = category
+            transaction["confidence"] = float(confidence)
 
             valid_transactions.append(transaction)
 

@@ -1,0 +1,31 @@
+description,amount,category
+SWIGGY,450,Food
+ZOMATO,320,Food
+DOMINOS,650,Food
+MCDONALDS,400,Food
+PIZZA HUT,550,Food
+UBER,250,Transport
+OLA,180,Transport
+RAPIDO,150,Transport
+PUNE METRO,60,Transport
+IRCTC,1200,Transport
+AMAZON,1500,Shopping
+FLIPKART,2100,Shopping
+MYNTRA,1800,Shopping
+AJIO,1200,Shopping
+NETFLIX,649,Entertainment
+SPOTIFY,119,Entertainment
+PRIME VIDEO,299,Entertainment
+ELECTRICITY,1800,Utilities
+WATER BILL,450,Utilities
+JIO RECHARGE,299,Utilities
+AIRTEL RECHARGE,399,Utilities
+APOLLO,600,Healthcare
+MEDPLUS,500,Healthcare
+PHARMACY,400,Healthcare
+MONTHLY RENT,15000,Rent
+PG RENT,9000,Rent
+HOUSE RENT,15000,Rent
+UNKNOWN STORE,300,Others
+SERVICE CHARGE,100,Others
+MISC PAYMENT,250,Others

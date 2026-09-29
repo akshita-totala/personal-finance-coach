@@ -2,3 +2,4 @@
 pdfplumber
 psycopg2-binary
 python-dotenv
+scikit-learn

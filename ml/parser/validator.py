@@ -29,7 +29,7 @@ def validate_transaction(transaction):
 
     # Date format
     try:
-        datetime.strptime(transaction["date"], "%Y-%m-%d")
+        datetime.strptime(transaction["date"], "%d/%m/%Y")
     except ValueError:
         return False, "Invalid date"
 

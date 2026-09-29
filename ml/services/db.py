@@ -76,13 +76,14 @@ def insert_statement(filename):
     return statement_id
 
 def insert_transaction(transaction, statement_id):
+
     conn = connect_db()
     cur = conn.cursor()
 
     query = """
     INSERT INTO transactions
-    (statement_id, user_id, date, description, amount, type, category)
-    VALUES (%s,%s,%s,%s,%s,%s,%s)
+    (statement_id, user_id, date, description, amount, type, category, confidence)
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
     """
 
     cur.execute(
@@ -94,7 +95,8 @@ def insert_transaction(transaction, statement_id):
             transaction["description"],
             transaction["amount"],
             transaction["type"].lower(),
-            transaction["category"]
+            transaction["category"],
+            transaction["confidence"]
         )
     )
 
@@ -102,3 +104,110 @@ def insert_transaction(transaction, statement_id):
 
     cur.close()
     conn.close()
+
+def insert_feedback(transaction_id, original_category, corrected_category):
+    conn = connect_db()
+    cur = conn.cursor()
+
+    query = """
+    INSERT INTO feedback
+    (transaction_id, original_category, corrected_category)
+    VALUES (%s, %s, %s)
+    """
+
+    cur.execute(
+        query,
+        (
+            transaction_id,
+            original_category,
+            corrected_category
+        )
+    )
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+def correct_transaction_category(
+    transaction_id,
+    corrected_category
+):
+    conn = connect_db()
+    cur = conn.cursor()
+
+    # Get current category
+    cur.execute(
+        """
+        SELECT category
+        FROM transactions
+        WHERE id = %s
+        """,
+        (transaction_id,)
+    )
+
+    result = cur.fetchone()
+
+    if result is None:
+        cur.close()
+        conn.close()
+        raise Exception("Transaction not found.")
+
+    original_category = result[0]
+
+    # Update transaction category
+    cur.execute(
+        """
+        UPDATE transactions
+        SET category = %s
+        WHERE id = %s
+        """,
+        (
+            corrected_category,
+            transaction_id
+        )
+    )
+
+    # Record feedback
+    cur.execute(
+        """
+        INSERT INTO feedback
+        (transaction_id, original_category, corrected_category)
+        VALUES (%s, %s, %s)
+        """,
+        (
+            transaction_id,
+            original_category,
+            corrected_category
+        )
+    )
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+def get_latest_feedback():
+    conn = connect_db()
+    cur = conn.cursor()
+
+    query = """
+    SELECT DISTINCT ON (f.transaction_id)
+        f.transaction_id,
+        t.description,
+        t.amount,
+        f.corrected_category
+    FROM feedback f
+    JOIN transactions t
+        ON f.transaction_id = t.id
+    ORDER BY f.transaction_id, f.created_at DESC
+    """
+
+    cur.execute(query)
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return rows
+    

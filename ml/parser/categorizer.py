@@ -1,57 +1,14 @@
-def categorize_transaction(description):
-    description = description.upper()
+from ml.models.predict_categorizer import predict_category
 
-    categories = {
-        "Food": [
-            "SWIGGY",
-            "ZOMATO",
-            "DOMINOS",
-            "PIZZA",
-            "MCDONALD",
-            "BURGER KING",
-            "CAFE"
-        ],
 
-        "Shopping": [
-            "AMAZON",
-            "FLIPKART",
-            "MYNTRA",
-            "AJIO",
-            "NYKAA"
-        ],
+def categorize_transaction(description, amount):
+    """
+    Predict transaction category using the trained ML model.
+    """
 
-        "Travel": [
-            "UBER",
-            "OLA",
-            "RAPIDO",
-            "IRCTC"
-        ],
+    category, confidence = predict_category(
+        description,
+        amount
+    )
 
-        "Entertainment": [
-            "NETFLIX",
-            "SPOTIFY",
-            "HOTSTAR",
-            "PRIME VIDEO"
-        ],
-
-        "Income": [
-            "SALARY",
-            "CREDIT INTEREST"
-        ],
-
-        "Utilities": [
-            "ELECTRICITY",
-            "WATER",
-            "GAS",
-            "AIRTEL",
-            "JIO",
-            "VI"
-        ]
-    }
-
-    for category, keywords in categories.items():
-        for keyword in keywords:
-            if keyword in description:
-                return category
-
-    return "Others"
+    return category, confidence
