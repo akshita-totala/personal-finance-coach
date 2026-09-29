@@ -20,82 +20,109 @@ The **Personal Finance Coach** solves this by automating the entire pipeline —
 | Transaction extraction & structuring | ✅ Complete |
 | Data validation (date, amount, type) | ✅ Complete |
 | Automatic expense categorization | ✅ Complete |
+| ML confidence scoring | ✅ Complete |
+| Manual category correction | ✅ Complete |
+| Feedback storage & feedback-based retraining | ✅ Complete |
 | PostgreSQL storage with audit logging | ✅ Complete |
 | Duplicate statement detection | ✅ Complete |
 | Graceful error handling | ✅ Complete |
-| Test suite | ✅ Complete |
-| Gemini AI integration (Q&A, smart parsing) | 🔄 Sprint 2 |
-| Anomaly detection engine | 🔄 Sprint 2 |
+| Streamlit dashboard | ✅ Complete |
+| Spending summary & category visualization | ✅ Complete |
+| End-to-end statement upload pipeline | ✅ Complete |
+| 500-row held-out ML evaluation | ⏳ Pending |
+| Genuine/manual labeling requirement | ⏳ Pending |
+| Anomaly detection engine | 🔄 Sprint 3 |
 | Monthly spend forecasting | 🔄 Sprint 3 |
-| Streamlit dashboard | 🔄 Sprint 3 |
 | Spring Boot REST API | 🔄 Sprint 4 |
-
----
 
 ## Tech Stack
 
-**Current (Sprint 1)**
+**Current**
+
 - Python 3.13
 - PostgreSQL 18
 - pdfplumber — PDF text extraction
 - psycopg2 — PostgreSQL driver
 - python-dotenv — environment configuration
-
-**Planned (Sprint 2+)**
-- Google Gemini API — AI-based parsing and Q&A
 - scikit-learn — ML expense categorization
-- Java Spring Boot — REST API layer
 - Streamlit — analytics dashboard
-- Docker + GitHub Actions — containerization and CI/CD
+- joblib — model persistence
 
----
+**Planned**
+
+- Java Spring Boot — REST API layer
+- Docker + GitHub Actions — containerization and CI/CD
 
 ## Project Structure
 
-```
+```text
 personal-finance-coach/
-│
-├── backend/                    # Java Spring Boot API (Sprint 4)
-├── dashboard/                  # Streamlit dashboard (Sprint 3)
+
+├── backend/
+│   └── # Java Spring Boot API (Sprint 4)
+
+├── dashboard/
+│   └── app.py                    # Streamlit dashboard
+
 ├── database/
-│   └── schema.sql              # PostgreSQL schema — all tables
-│
+│   └── schema.sql                # PostgreSQL schema
+
 ├── ml/
+│   ├── models/
+│   │   ├── categorizer_model.pkl
+│   │   ├── tfidf_vectorizer.pkl
+│   │   ├── train_categorizer.py
+│   │   ├── predict_categorizer.py
+│   │   ├── retrain_from_feedback.py
+│   │   └── test_india_model.py
+│   │
 │   ├── parser/
-│   │   ├── local_parser.py     # pdfplumber-based PDF extraction
-│   │   ├── parser_service.py   # Orchestrates parsing pipeline
-│   │   ├── pdf_reader.py       # PDF file reading utilities
-│   │   ├── prompts.py          # Prompt templates (for Gemini integration)
-│   │   └── validator.py        # Transaction data validation rules
+│   │   ├── local_parser.py
+│   │   ├── parser_service.py
+│   │   ├── pdf_reader.py
+│   │   ├── categorizer.py
+│   │   ├── prompts.py
+│   │   └── validator.py
 │   │
 │   ├── services/
-│   │   ├── db.py               # PostgreSQL connection and query helpers
-│   │   └── statement_service.py # Statement upload, duplicate detection, audit logs
+│   │   ├── db.py
+│   │   └── statement_service.py
 │   │
-│   └── tests/
-│       ├── test_database.py
-│       ├── test_gemini.py
-│       ├── test_local_parser.py
-│       ├── test_parser_service.py
-│       ├── test_pdf_reader.py
-│       ├── test_statement_service.py
-│       └── test_validator.py
+│   ├── tests/
+│   │   ├── test_all.py
+│   │   ├── test_categorizer.py
+│   │   ├── test_correction.py
+│   │   ├── test_database.py
+│   │   ├── test_feedback.py
+│   │   ├── test_gemini.py
+│   │   ├── test_local_parser.py
+│   │   ├── test_parser_service.py
+│   │   ├── test_pdf_reader.py
+│   │   ├── test_statement_service.py
+│   │   └── test_validator.py
+│   │
+│   └── data/
+│       ├── india_transactions.csv
+│       ├── india_train.csv
+│       ├── india_test.csv
+│       ├── india_train_augmented.csv
+│       ├── combined_transactions.csv
+│       ├── processed_transactions.csv
+│       └── Personal_Finance_Dataset.csv
 │
-├── sample_data/                # Synthetic bank statement PDFs for testing
+├── sample_data/
 ├── .gitignore
 ├── README.md
 └── requirements.txt
-```
-
----
 
 ## Database Schema
 
 ```sql
-users          — registered users
-statements     — uploaded PDF statements (with duplicate detection)
-transactions   — extracted and categorized transactions
-audit_logs     — all data access and modification events
+users         — registered users
+statements    — uploaded PDF statements
+transactions  — extracted and categorized transactions
+audit_logs    — data access and modification events
+feedback      — user category corrections used for model improvement
 ```
 
 Full schema: [`database/schema.sql`](database/schema.sql)
@@ -163,12 +190,51 @@ python -m ml.tests.test_all
 
 ```
 Sprint 1 (Weeks 1–3)   ✅  PDF parsing, validation, DB storage, audit logs
-Sprint 2 (Weeks 4–6)   🔄  Gemini API, ML categorization, anomaly detection
-Sprint 3 (Weeks 7–9)   ⏳  Forecasting, Q&A engine, Streamlit dashboard
-Sprint 4 (Weeks 10–12) ⏳  Spring Boot API, JWT auth, Docker, CI/CD
+
+Sprint 2 (Weeks 4–6)   ✅  ML categorization, feedback loop,
+                            Streamlit dashboard
+
+Sprint 2 validation     ⏳  500-row held-out evaluation and
+                            manual-labeling requirement
+
+Sprint 3 (Weeks 7–9)    ⏳  Anomaly detection, forecasting,
+                            Spring Boot API
+
+Sprint 4 (Weeks 10–12) ⏳  JWT authentication, Docker, CI/CD
+
 Sprint 5 (Weeks 13–14) ⏳  Testing, documentation, final demo
 ```
+## ML Validation
 
+The current expense categorization model uses TF-IDF text features with a Random Forest classifier.
+
+The model supports the following categories:
+
+- Food
+- Rent
+- Transport
+- Entertainment
+- Utilities
+- Healthcare
+- Shopping
+- Others
+
+### Current Development Result
+
+On the locked 40-row India-specific development test set:
+
+- Accuracy: **1.00**
+- Weighted F1-score: **1.00**
+- Test size: **40 transactions**
+- 5 transactions per category
+
+The project also includes a feedback loop where user corrections are stored in PostgreSQL and incorporated into subsequent model retraining.
+
+### Pending Acceptance Evaluation
+
+The planned acceptance criterion is evaluation on a **500-row held-out labeled test set**. This evaluation has not yet been completed.
+
+The current India-specific dataset also consists of programmatically generated examples rather than 200 genuinely manually labeled transactions, so the manual-labeling requirement remains pending.
 ---
 
 ## Security & Privacy
