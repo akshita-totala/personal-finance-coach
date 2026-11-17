@@ -189,20 +189,20 @@ python -m ml.tests.test_all
 ## Sprint Roadmap
 
 ```
-Sprint 1 (Weeks 1–3)   ✅  PDF parsing, validation, DB storage, audit logs
+Sprint 1   ✅  PDF parsing, validation, DB storage, audit logs
 
-Sprint 2 (Weeks 4–6)   ✅  ML categorization, feedback loop,
+Sprint 2    ✅  ML categorization, feedback loop,
                             Streamlit dashboard
 
 Sprint 2 validation     ⏳  500-row held-out evaluation and
                             manual-labeling requirement
 
-Sprint 3 (Weeks 7–9)    ⏳  Anomaly detection, forecasting,
+Sprint 3    ⏳  Anomaly detection, forecasting,
                             Spring Boot API
 
-Sprint 4 (Weeks 10–12) ⏳  JWT authentication, Docker, CI/CD
+Sprint 4  ⏳  JWT authentication, Docker, CI/CD
 
-Sprint 5 (Weeks 13–14) ⏳  Testing, documentation, final demo
+Sprint 5  ⏳  Testing, documentation, final demo
 ```
 ## ML Validation
 
