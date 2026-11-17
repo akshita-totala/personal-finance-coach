@@ -1,27 +1,49 @@
-import streamlit as st
-import psycopg2
-import tempfile
-import os
-import pandas as pd
 
+import os
 import sys
-import os
+import tempfile
 
-sys.path.insert(
-    0,
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..")
-    )
+import pandas as pd
+import streamlit as st
+
+# Make project root importable
+PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..")
+)
+sys.path.insert(0, PROJECT_ROOT)
+
+from ml.services.db import (
+    connect_db,
+    correct_transaction_category
+)
+from ml.services.statement_service import upload_statement
+
+from ml.analytics.spending_analysis import (
+    get_spending_summary,
+    get_category_breakdown,
+    get_monthly_spending
+)
+from ml.analytics.anomaly_detection import (
+    detect_database_anomalies
+)
+from ml.analytics.forecasting import (
+    forecast_from_database
+)
+from ml.analytics.financial_insights import (
+    generate_financial_insights
 )
 
-from ml.services.statement_service import upload_statement
-from ml.services.db import correct_transaction_category
+
+# -------------------------------------------------
+# PAGE CONFIGURATION
+# -------------------------------------------------
 
 st.set_page_config(
     page_title="Personal Finance Coach",
     page_icon="💰",
     layout="wide"
 )
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -38,17 +60,11 @@ h1 {
 
 h2, h3 {
     font-weight: 600 !important;
-    letter-spacing: -0.02em;
 }
 
 [data-testid="stMetricValue"] {
     font-size: 1.7rem;
     font-weight: 600;
-}
-
-[data-testid="stMetricLabel"] {
-    font-size: 0.9rem;
-    font-weight: 500;
 }
 
 .stButton > button {
@@ -58,12 +74,18 @@ h2, h3 {
 </style>
 """, unsafe_allow_html=True)
 
+
+# -------------------------------------------------
+# HEADER
+# -------------------------------------------------
+
 st.title("💰 Personal Finance Coach")
 st.write("Your personal finance dashboard")
 
-# -----------------------------
-# Upload Bank Statement
-# -----------------------------
+
+# -------------------------------------------------
+# PDF UPLOAD
+# -------------------------------------------------
 
 st.subheader("📄 Upload Bank Statement")
 
@@ -76,173 +98,339 @@ if uploaded_file is not None:
 
     if st.button("Process Statement"):
 
-        temp_path = os.path.join(
-            tempfile.gettempdir(),
-            uploaded_file.name
-        )
+        temp_path = None
 
-        with open(temp_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        try:
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".pdf"
+            ) as temp_file:
 
-        result = upload_statement(temp_path)
+                temp_file.write(uploaded_file.getbuffer())
+                temp_path = temp_file.name
 
-        if result["status"] == "success":
-            st.success(
-                f"Statement processed successfully! "
-                f"{result['transactions_uploaded']} transaction(s) uploaded."
-            )
+            result = upload_statement(temp_path)
 
-            st.rerun()
+            if result["status"] == "success":
+                st.success(
+                    f"Statement processed successfully! "
+                    f"{result['transactions_uploaded']} "
+                    "transaction(s) uploaded."
+                )
+                st.rerun()
 
-        else:
-            st.error(result["message"])
+            else:
+                st.error(result["message"])
 
-def connect_db():
-    return psycopg2.connect(
-        host="localhost",
-        database="finance_coach",
-        user="postgres",
-        password="root"
-    )
+        except Exception as error:
+            st.error(f"Statement processing failed: {error}")
 
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+
+
+st.divider()
+
+
+# -------------------------------------------------
+# FETCH TRANSACTIONS
+# -------------------------------------------------
+
+rows = []
+database_available = False
 
 try:
     conn = connect_db()
 
-    query = """
-    SELECT
-        id,
-        date,
-        description,
-        amount,
-        type,
-        category,
-        confidence
-    FROM transactions
-    ORDER BY date DESC;
-    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    id,
+                    date,
+                    description,
+                    amount,
+                    type,
+                    category,
+                    confidence,
+                    is_anomaly
+                FROM transactions
+                ORDER BY date DESC, id DESC;
+            """)
 
-    cursor = conn.cursor()
-    cursor.execute(query)
+            rows = cursor.fetchall()
 
-    rows = cursor.fetchall()
+        database_available = True
 
-    cursor.close()
-    conn.close()
+    finally:
+        conn.close()
 
-        # -----------------------------
-    # Category Totals
-    # -----------------------------
+except Exception as error:
+    st.error(f"Database connection failed: {error}")
 
-    category_totals = {}
 
-    for row in rows:
-        if str(row[4]).lower() == "debit":
-            category = row[5]
+# -------------------------------------------------
+# DASHBOARD TABS
+# -------------------------------------------------
 
-            if category:
-                category_totals[category] = (
-                    category_totals.get(category, 0) + float(row[3])
+overview_tab, analytics_tab, transactions_tab, corrections_tab = (
+    st.tabs([
+        "📊 Overview",
+        "🧠 Financial Analytics",
+        "📋 Transactions",
+        "✏️ Corrections"
+    ])
+)
+
+
+# =================================================
+# TAB 1: OVERVIEW
+# =================================================
+
+with overview_tab:
+
+    st.header("Spending Overview")
+
+    if database_available:
+
+        try:
+            summary = get_spending_summary()
+            categories = get_category_breakdown()
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            col1.metric(
+                "💰 Total Spending",
+                f"₹{summary['total_spending']:,.2f}"
+            )
+
+            col2.metric(
+                "💵 Total Income",
+                f"₹{summary['total_income']:,.2f}"
+            )
+
+            col3.metric(
+                "📈 Net Cash Flow",
+                f"₹{summary['net_cash_flow']:,.2f}"
+            )
+
+            col4.metric(
+                "🧾 Transactions",
+                summary["transaction_count"]
+            )
+
+            st.subheader("Category-wise Spending")
+
+            if categories:
+
+                category_df = pd.DataFrame(
+                    list(categories.items()),
+                    columns=["Category", "Amount"]
                 )
 
-    # -----------------------------
-    # Spending Summary
-    # -----------------------------
+                st.bar_chart(
+                    category_df.set_index("Category")
+                )
 
-    st.subheader("Spending Summary")
+            else:
+                st.info("No debit transactions available.")
 
-    total_spending = sum(
-        row[3]
-        for row in rows
-        if str(row[4]).lower() == "debit"
-    )
+            st.subheader("Category Summary")
 
-    food_spending = sum(
-        row[3]
-        for row in rows
-        if str(row[4]).lower() == "debit"
-        and row[5] == "Food"
-    )
+            if categories:
+                st.dataframe(
+                    category_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
 
-    transport_spending = sum(
-        row[3]
-        for row in rows
-        if str(row[4]).lower() == "debit"
-        and row[5] == "Transport"
-    )
+        except Exception as error:
+            st.error(f"Unable to load spending overview: {error}")
 
-    shopping_spending = sum(
-        row[3]
-        for row in rows
-        if str(row[4]).lower() == "debit"
-        and row[5] == "Shopping"
-    )
+    else:
+        st.warning("Database is currently unavailable.")
 
-    col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric(
-        "💰 Total Spending",
-        f"₹{total_spending:,.2f}"
-    )
+# =================================================
+# TAB 2: FINANCIAL ANALYTICS
+# =================================================
 
-    col2.metric(
-        "🍔 Food",
-        f"₹{food_spending:,.2f}"
-    )
+with analytics_tab:
 
-    col3.metric(
-        "🚕 Transport",
-        f"₹{transport_spending:,.2f}"
-    )
+    st.header("Financial Intelligence")
 
-    col4.metric(
-        "🛍️ Shopping",
-        f"₹{shopping_spending:,.2f}"
-    )
+    if database_available:
 
-    col5, col6, col7, col8 = st.columns(4)
+        # -----------------------------------------
+        # MONTHLY SPENDING
+        # -----------------------------------------
 
-    col5.metric(
-        "🏠 Rent",
-        f"₹{category_totals.get('Rent', 0):,.2f}"
-    )
+        st.subheader("📅 Monthly Spending Trends")
 
-    col6.metric(
-        "🎬 Entertainment",
-        f"₹{category_totals.get('Entertainment', 0):,.2f}"
-    )
+        try:
+            monthly_data = get_monthly_spending()
 
-    col7.metric(
-        "💡 Utilities",
-        f"₹{category_totals.get('Utilities', 0):,.2f}"
-    )
+            if monthly_data:
 
-    col8.metric(
-        "🏥 Healthcare",
-        f"₹{category_totals.get('Healthcare', 0):,.2f}"
-    )
+                monthly_df = pd.DataFrame(
+                    list(monthly_data.items()),
+                    columns=["Month", "Spending"]
+                )
 
-    # -----------------------------
-    # Spending by Category
-    # -----------------------------
+                st.bar_chart(
+                    monthly_df.set_index("Month")
+                )
 
-    
+                st.dataframe(
+                    monthly_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
 
-    
+                if len(monthly_data) < 2:
+                    st.info(
+                        "Upload statements covering additional "
+                        "months to enable month-over-month comparisons."
+                    )
 
-    if category_totals:
-        st.subheader("Spending by Category")
+            else:
+                st.info("No monthly spending data available.")
 
-        st.bar_chart(category_totals)
+        except Exception as error:
+            st.error(f"Monthly analysis failed: {error}")
 
-    st.subheader("Transactions")
+        st.divider()
 
-    if rows:
+        # -----------------------------------------
+        # ANOMALY DETECTION
+        # -----------------------------------------
+
+        st.subheader("🚨 Unusual Transaction Detection")
+
+        try:
+            anomalies = detect_database_anomalies()
+
+            if anomalies:
+
+                st.warning(
+                    f"{len(anomalies)} potential unusual "
+                    "transaction(s) detected."
+                )
+
+                anomaly_df = pd.DataFrame(anomalies)
+
+                st.dataframe(
+                    anomaly_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                st.caption(
+                    "These are statistical flags, not confirmed fraud."
+                )
+
+            else:
+                st.success(
+                    "No potential unusual transactions detected "
+                    "with the current data and detection threshold."
+                )
+
+                st.caption(
+                    "Categories with insufficient observations "
+                    "are excluded from detection."
+                )
+
+        except Exception as error:
+            st.error(f"Anomaly detection failed: {error}")
+
+        # Show previously persisted flags separately
+        persisted_anomalies = [
+            row for row in rows if row[7] is True
+        ]
+
+        st.caption(
+            f"Previously stored anomaly flags: "
+            f"{len(persisted_anomalies)}"
+        )
+
+        st.divider()
+
+        # -----------------------------------------
+        # EXPENSE FORECASTING
+        # -----------------------------------------
+
+        st.subheader("🔮 Monthly Expense Forecast")
+
+        try:
+            forecast = forecast_from_database(periods=1)
+
+            st.metric(
+                "Moving Average Baseline",
+                f"₹{forecast['moving_average_baseline']:,.2f}"
+            )
+
+            forecast_df = pd.DataFrame(
+                forecast["forecasts"]
+            )
+
+            st.dataframe(
+                forecast_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.caption(
+                "Forecasts are estimates based on historical "
+                "monthly expenditure, not guaranteed outcomes."
+            )
+
+        except ValueError as error:
+            st.info(
+                f"Forecast currently unavailable: {error}"
+            )
+
+        except Exception as error:
+            st.error(f"Forecasting failed: {error}")
+
+        st.divider()
+
+        # -----------------------------------------
+        # FINANCIAL INSIGHTS
+        # -----------------------------------------
+
+        st.subheader("💡 Personal Financial Insights")
+
+        try:
+            insights = generate_financial_insights()
+
+            for index, insight in enumerate(insights, start=1):
+                st.write(f"**{index}.** {insight}")
+
+        except Exception as error:
+            st.error(f"Unable to generate insights: {error}")
+
+    else:
+        st.warning(
+            "Connect to the database to view financial analytics."
+        )
+
+
+# =================================================
+# TAB 3: TRANSACTIONS
+# =================================================
+
+with transactions_tab:
+
+    st.header("Transaction History")
+
+    if database_available and rows:
 
         transaction_data = []
 
         for row in rows:
             transaction_data.append({
+                "ID": row[0],
                 "Date": row[1],
                 "Description": row[2],
                 "Amount": f"₹{float(row[3]):,.2f}",
@@ -252,6 +440,9 @@ try:
                     f"{float(row[6]) * 100:.0f}%"
                     if row[6] is not None
                     else "—"
+                ),
+                "Potential Anomaly": (
+                    "Yes" if row[7] else "No"
                 )
             })
 
@@ -263,73 +454,97 @@ try:
             hide_index=True
         )
 
-    else:
+    elif database_available:
         st.info("No transactions found.")
 
-except Exception as e:
-    st.error(f"Database connection failed: {e}")
+    else:
+        st.warning("Database is unavailable.")
 
-    # -----------------------------
-# Correct Transaction Category
-# -----------------------------
 
-st.subheader("✏️ Correct Transaction Category")
+# =================================================
+# TAB 4: MANUAL CATEGORY CORRECTIONS
+# =================================================
 
-transaction_ids = [row[0] for row in rows]
+with corrections_tab:
 
-if transaction_ids:
+    st.header("✏️ Correct Transaction Category")
 
-    selected_id = st.selectbox(
-        "Select Transaction",
-        transaction_ids
-    )
+    if database_available and rows:
 
-    selected_row = next(
-        row for row in rows
-        if row[0] == selected_id
-    )
+        transaction_ids = [row[0] for row in rows]
 
-    st.write(
-        f"**{selected_row[2]}** — ₹{float(selected_row[3]):,.2f}"
-    )
-
-    categories = [
-        "Food",
-        "Rent",
-        "Transport",
-        "Entertainment",
-        "Utilities",
-        "Healthcare",
-        "Shopping",
-        "Others"
-    ]
-
-    current_category = selected_row[5]
-
-    selected_category = st.selectbox(
-        "Correct Category",
-        categories,
-        index=(
-            categories.index(current_category)
-            if current_category in categories
-            else 0
+        selected_id = st.selectbox(
+            "Select Transaction",
+            transaction_ids
         )
-    )
 
-    if st.button("Save Correction"):
+        selected_row = next(
+            row for row in rows
+            if row[0] == selected_id
+        )
 
-        if selected_category == current_category:
-            st.info("The transaction already has this category.")
+        st.write(
+            f"**{selected_row[2]}** — "
+            f"₹{float(selected_row[3]):,.2f}"
+        )
 
-        else:
-            correct_transaction_category(
-                transaction_id=selected_id,
-                corrected_category=selected_category
+        st.write(
+            f"Current category: **{selected_row[5]}**"
+        )
+
+        categories = [
+            "Food",
+            "Rent",
+            "Transport",
+            "Entertainment",
+            "Utilities",
+            "Healthcare",
+            "Shopping",
+            "Others"
+        ]
+
+        current_category = selected_row[5]
+
+        selected_category = st.selectbox(
+            "Correct Category",
+            categories,
+            index=(
+                categories.index(current_category)
+                if current_category in categories
+                else 0
             )
+        )
 
-            st.success(
-                f"Transaction {selected_id} updated to "
-                f"{selected_category}."
-            )
+        if st.button("Save Correction"):
 
-            st.rerun()
+            if selected_category == current_category:
+
+                st.info(
+                    "The transaction already has this category."
+                )
+
+            else:
+
+                try:
+                    correct_transaction_category(
+                        transaction_id=selected_id,
+                        corrected_category=selected_category
+                    )
+
+                    st.success(
+                        f"Transaction {selected_id} updated to "
+                        f"{selected_category}."
+                    )
+
+                    st.rerun()
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to save correction: {error}"
+                    )
+
+    elif database_available:
+        st.info("No transactions available for correction.")
+
+    else:
+        st.warning("Database is unavailable.")
